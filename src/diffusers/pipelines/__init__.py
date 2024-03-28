@@ -105,10 +105,10 @@ else:
             "StableDiffusionPix2PixZeroPipeline",
             "StableDiffusionParadigmsPipeline",
             "StableDiffusionModelEditingPipeline",
-            "VersatileDiffusionDualGuidedPipeline",
-            "VersatileDiffusionImageVariationPipeline",
-            "VersatileDiffusionPipeline",
-            "VersatileDiffusionTextToImagePipeline",
+            # "VersatileDiffusionDualGuidedPipeline",
+            # "VersatileDiffusionImageVariationPipeline",
+            # "VersatileDiffusionPipeline",
+            # "VersatileDiffusionTextToImagePipeline",
         ]
     )
     _import_structure["amused"] = ["AmusedImg2ImgPipeline", "AmusedInpaintPipeline", "AmusedPipeline"]
@@ -182,6 +182,14 @@ else:
     _import_structure["paint_by_example"] = ["PaintByExamplePipeline"]
     _import_structure["pia"] = ["PIAPipeline"]
     _import_structure["pixart_alpha"] = ["PixArtAlphaPipeline"]
+
+    _import_structure["versatile_diffusion"] = [
+        "VersatileDiffusionDualGuidedPipeline",
+        "VersatileDiffusionImageVariationPipeline",
+        "VersatileDiffusionPipeline",
+        "VersatileDiffusionTextToImagePipeline",
+    ]
+
     _import_structure["semantic_stable_diffusion"] = ["SemanticStableDiffusionPipeline"]
     _import_structure["shap_e"] = ["ShapEImg2ImgPipeline", "ShapEPipeline"]
     _import_structure["stable_cascade"] = [
@@ -394,10 +402,10 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             StableDiffusionModelEditingPipeline,
             StableDiffusionParadigmsPipeline,
             StableDiffusionPix2PixZeroPipeline,
-            VersatileDiffusionDualGuidedPipeline,
-            VersatileDiffusionImageVariationPipeline,
-            VersatileDiffusionPipeline,
-            VersatileDiffusionTextToImagePipeline,
+            # VersatileDiffusionDualGuidedPipeline,
+            # VersatileDiffusionImageVariationPipeline,
+            # VersatileDiffusionPipeline,
+            # VersatileDiffusionTextToImagePipeline,
             VQDiffusionPipeline,
         )
         from .i2vgen_xl import I2VGenXLPipeline
@@ -441,6 +449,12 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from .paint_by_example import PaintByExamplePipeline
         from .pia import PIAPipeline
         from .pixart_alpha import PixArtAlphaPipeline
+        from .versatile_diffusion import(
+            VersatileDiffusionDualGuidedPipeline,
+            VersatileDiffusionImageVariationPipeline,
+            VersatileDiffusionPipeline,
+            VersatileDiffusionTextToImagePipeline,
+        )
         from .semantic_stable_diffusion import SemanticStableDiffusionPipeline
         from .shap_e import ShapEImg2ImgPipeline, ShapEPipeline
         from .stable_cascade import (
