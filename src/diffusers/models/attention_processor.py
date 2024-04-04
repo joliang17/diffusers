@@ -112,6 +112,7 @@ class Attention(nn.Module):
         _from_deprecated_attn_block: bool = False,
         processor: Optional["AttnProcessor"] = None,
         out_dim: int = None,
+        sr_ratio: int = 1,
     ):
         super().__init__()
         self.inner_dim = out_dim if out_dim is not None else dim_head * heads
@@ -142,6 +143,12 @@ class Attention(nn.Module):
 
         self.added_kv_proj_dim = added_kv_proj_dim
         self.only_cross_attention = only_cross_attention
+        self.sr_ratio = sr_ratio
+        if self.sr_ratio > 1:
+            self.sr = nn.Conv2d(self.inner_dim, self.inner_dim, groups=self.inner_dim, kernel_size=sr_ratio, stride=sr_ratio)
+            self.sr.weight.data.fill_(1/self.sr_ratio**2)
+            self.sr.bias.data.zero_()
+            self.norm = nn.LayerNorm(self.inner_dim)
 
         if self.added_kv_proj_dim is None and self.only_cross_attention:
             raise ValueError(
@@ -483,6 +490,20 @@ class Attention(nn.Module):
             raise ValueError(f"{lora_processor_cls} does not exist.")
 
         return lora_processor
+
+    def downsample_2d(self, tensor, H, W, scale_factor, ):
+        if scale_factor == 1:
+            return tensor
+        B, N, C = tensor.shape
+
+        tensor = tensor.reshape(B, H, W, C).permute(0, 3, 1, 2)
+        new_H, new_W = int(H / scale_factor), int(W / scale_factor)
+        new_N = new_H * new_W
+
+        tensor = self.sr(tensor).reshape(B, C, -1).permute(0, 2, 1)
+        tensor = self.norm(tensor)
+
+        return tensor.reshape(B, new_N, C).contiguous(), new_N
 
     def forward(
         self,
@@ -1270,6 +1291,13 @@ class AttnProcessor2_0:
         head_dim = inner_dim // attn.heads
 
         query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
+        N = key.shape[1]  # key shape: [batch_size, H*W, inner_dim=head_dim * attn.heads)
+        H = W = int(N ** 0.5)
+
+        if attn.sr_ratio > 1:
+            key, _ = attn.downsample_2d(key, H, W, attn.sr_ratio, )
+            value, _ = attn.downsample_2d(value, H, W, attn.sr_ratio, )
 
         key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
