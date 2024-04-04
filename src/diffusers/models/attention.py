@@ -146,6 +146,7 @@ class BasicTransformerBlock(nn.Module):
         ff_inner_dim: Optional[int] = None,
         ff_bias: bool = True,
         attention_out_bias: bool = True,
+        sr_ratio: int = 1,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -203,6 +204,7 @@ class BasicTransformerBlock(nn.Module):
             cross_attention_dim=cross_attention_dim if only_cross_attention else None,
             upcast_attention=upcast_attention,
             out_bias=attention_out_bias,
+            sr_ratio=sr_ratio,
         )
 
         # 2. Cross-Attn

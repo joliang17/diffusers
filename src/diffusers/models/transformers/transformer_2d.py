@@ -100,6 +100,7 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
         attention_type: str = "default",
         caption_channels: int = None,
         interpolation_scale: float = None,
+        sr_ratio: int = 1,
     ):
         super().__init__()
         if patch_size is not None:
@@ -212,6 +213,7 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
                     attention_type=attention_type,
+                    sr_ratio=sr_ratio,
                 )
                 for d in range(num_layers)
             ]
