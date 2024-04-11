@@ -24,7 +24,7 @@ from ..utils import deprecate, logging
 from ..utils.import_utils import is_xformers_available
 from ..utils.torch_utils import maybe_allow_in_graph
 from .lora import LoRALinearLayer
-
+import math
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -34,6 +34,18 @@ if is_xformers_available():
     import xformers.ops
 else:
     xformers = None
+    
+    
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 @maybe_allow_in_graph
@@ -114,7 +126,11 @@ class Attention(nn.Module):
         out_dim: int = None,
     ):
         super().__init__()
+        self.ori_heads = heads
+        print('self.ori_heads: ', self.ori_heads)
+        print('dim_head: ', dim_head)
         self.inner_dim = out_dim if out_dim is not None else dim_head * heads
+        print('self.inner_dim: ', self.inner_dim)
         self.query_dim = query_dim
         self.use_bias = bias
         self.is_cross_attention = cross_attention_dim is not None
@@ -181,6 +197,8 @@ class Attention(nn.Module):
                 f"unknown cross_attention_norm: {cross_attention_norm}. Should be None, 'layer_norm' or 'group_norm'"
             )
 
+        self.num_key_value_heads = 2
+
         linear_cls = nn.Linear
 
         self.linear_cls = linear_cls
@@ -188,7 +206,12 @@ class Attention(nn.Module):
 
         if not self.only_cross_attention:
             # only relevant for the `AddedKVProcessor` classes
+            # print('self.cross_attention_dim: ', self.cross_attention_dim)
+            # print('self.inner_dim: ', self.inner_dim)
+            # self.to_k = linear_cls(self.cross_attention_dim, self.inner_dim/4, bias=bias)
+            # print('self.to_k.weight.shape: ', self.to_k.weight.shape)
             self.to_k = linear_cls(self.cross_attention_dim, self.inner_dim, bias=bias)
+            # print('*self.to_k.weight.shape: ', self.to_k.weight.shape)
             self.to_v = linear_cls(self.cross_attention_dim, self.inner_dim, bias=bias)
         else:
             self.to_k = None
@@ -211,6 +234,17 @@ class Attention(nn.Module):
                 AttnProcessor2_0() if hasattr(F, "scaled_dot_product_attention") and self.scale_qk else AttnProcessor()
             )
         self.set_processor(processor)
+        
+    def post_init(self):
+        try:
+            # print('before changing the weights')
+            print('self.to_k.weight.shape: ', self.to_k.weight.shape)
+            self.to_k.weight.data = self.to_k.weight[:self.inner_dim//4,:]
+            self.to_v.weight.data = self.to_v.weight[:self.inner_dim//4,:]
+            # self.to_out[0].weight.data = self.to_out[0].weight[:,:]
+            # print('after changing the weights')
+        except:
+            pass
 
     def set_use_memory_efficient_attention_xformers(
         self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None
@@ -518,6 +552,8 @@ class Attention(nn.Module):
                 f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
             )
         cross_attention_kwargs = {k: w for k, w in cross_attention_kwargs.items() if k in attn_parameters}
+        
+        print('self.processor:', self.processor)
 
         return self.processor(
             self,
@@ -779,8 +815,12 @@ class AttnProcessor:
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
+        
         hidden_states = torch.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
+        
+        hidden_states = hidden_states.transpose(1, 2).contiguous()
+        hidden_states = hidden_states.reshape(bsz, q_len, -1)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -1263,6 +1303,8 @@ class AttnProcessor2_0:
         elif attn.norm_cross:
             encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
 
+        print('encoder_hidden_states.shape: ', encoder_hidden_states.shape)
+        print('attn.to_k.weight.data.shape: ', attn.to_k.weight.data.shape)
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
 
@@ -1271,17 +1313,32 @@ class AttnProcessor2_0:
 
         query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-        key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, attn.num_key_value_heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, attn.num_key_value_heads, head_dim).transpose(1, 2)
+        
+        key = repeat_kv(key, 4)
+        value = repeat_kv(value, 4)
 
         # the output of sdp = (batch, num_heads, seq_len, head_dim)
         # TODO: add support for attn.scale when we move to Torch 2.1
-        hidden_states = F.scaled_dot_product_attention(
-            query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-        )
+        # hidden_states = F.scaled_dot_product_attention(
+        #     query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
+        # )
+        # print('ori hidden_states.shape: ', hidden_states.shape)
+        
+        attn_weights = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(attn.ori_heads)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        attn_output = torch.matmul(attn_weights, value)
+        
+        print('our attn_output.shape: ', attn_output.shape)
+                                   
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        hidden_states = attn_output.reshape(hidden_states.size()[0], hidden_states.size()[1], -1)
 
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
-        hidden_states = hidden_states.to(query.dtype)
+        # hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+        # hidden_states = hidden_states.to(query.dtype)
+        
+        print('hidden_states.shape: ', hidden_states.shape)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)

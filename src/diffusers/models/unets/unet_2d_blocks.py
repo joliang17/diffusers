@@ -834,6 +834,11 @@ class UNetMidBlock2DCrossAttn(nn.Module):
         self.resnets = nn.ModuleList(resnets)
 
         self.gradient_checkpointing = False
+        
+    def post_init(self):
+        for module in self.attentions:
+            if hasattr(module, "post_init"):
+                module.post_init()
 
     def forward(
         self,

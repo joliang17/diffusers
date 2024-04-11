@@ -251,6 +251,11 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
 
         self.gradient_checkpointing = False
+        
+    def post_init(self):
+        for module in self.transformer_blocks:
+            if hasattr(module, "post_init"):
+                module.post_init()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):

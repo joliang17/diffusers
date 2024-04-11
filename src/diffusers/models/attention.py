@@ -274,6 +274,13 @@ class BasicTransformerBlock(nn.Module):
         # let chunk size default to None
         self._chunk_size = None
         self._chunk_dim = 0
+        
+    def post_init(self):
+        try:
+            self.attn1.post_init()
+            self.attn2.post_init()
+        except:
+            pass
 
     def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
         # Sets chunk feed-forward

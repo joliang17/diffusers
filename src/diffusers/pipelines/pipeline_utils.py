@@ -911,6 +911,15 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
 
         # 9. Save where the model was instantiated from
         model.register_to_config(_name_or_path=pretrained_model_name_or_path)
+        
+        
+        module_names, _ = model._get_signature_keys(model)
+        modules = [getattr(model, n, None) for n in module_names]
+        modules = [m for m in modules if isinstance(m, torch.nn.Module)]
+        
+        print('model: ', model)
+        print('modules: ', modules)
+        
         return model
 
     @property
@@ -1566,6 +1575,24 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
         ```
         """
         self.set_use_memory_efficient_attention_xformers(True, attention_op)
+        
+    def post_init(self):
+        print('?')
+        def fn_recursive_set_mem_eff(module: torch.nn.Module):
+            if hasattr(module, "post_init"):
+                module.post_init()
+
+            for child in module.children():
+                fn_recursive_set_mem_eff(child)
+
+        module_names, _ = self._get_signature_keys(self)
+        modules = [getattr(self, n, None) for n in module_names]
+        modules = [m for m in modules if isinstance(m, torch.nn.Module)][1:2]
+        
+        print('check modules: ', modules)
+
+        for module in modules:
+            fn_recursive_set_mem_eff(module)
 
     def disable_xformers_memory_efficient_attention(self):
         r"""

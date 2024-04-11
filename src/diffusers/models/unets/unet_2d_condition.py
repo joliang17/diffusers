@@ -478,6 +478,13 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
         )
 
         self._set_pos_net_if_use_gligen(attention_type=attention_type, cross_attention_dim=cross_attention_dim)
+        
+        
+    def post_init(self):
+        for module in self.down_blocks:
+            if hasattr(module, "post_init"):
+                module.post_init()
+    
 
     def _check_config(
         self,

@@ -110,6 +110,23 @@ class StableDiffusionPipeline(DiffusionPipeline, StableDiffusionMixin):
             self.k_diffusion_model = CompVisVDenoiser(model)
         else:
             self.k_diffusion_model = CompVisDenoiser(model)
+            
+    # def post_init(self):
+    #     print('?')
+    #     def fn_recursive_set_mem_eff(module: torch.nn.Module):
+    #         if hasattr(module, "post_init"):
+    #             module.post_init()
+
+    #         for child in module.children():
+    #             fn_recursive_set_mem_eff(child)
+
+    #     module_names, _ = self._get_signature_keys(self)
+    #     modules = [getattr(self, n, None) for n in module_names]
+    #     modules = [m for m in modules if isinstance(m, torch.nn.Module)]
+
+    #     for module in modules:
+    #         fn_recursive_set_mem_eff(module)
+        
 
     def set_sampler(self, scheduler_type: str):
         warnings.warn("The `set_sampler` method is deprecated, please use `set_scheduler` instead.")
